@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public class Util {
+public class ListUtil {
     public static <T> List<List<T>> divideList(List<T> originalList, int numChunks) {
         if (originalList.isEmpty()) {
             return List.of(List.of());

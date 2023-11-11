@@ -208,7 +208,7 @@ public class Window extends JFrame {
         List<List<String>> list;
 
         try {
-            list = Util.divideList(connection.getMails(), 32);
+            list = ListUtil.divideList(connection.getMails(), 32);
         } catch (SQLException e) {
             logger.printStackTrace(e);
             return;
