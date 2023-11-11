@@ -2,9 +2,6 @@ package ua.terra;
 
 import lombok.SneakyThrows;
 
-
-
-
 public class Main {
     public static String sessionUser;
     public static String sessionPassword;

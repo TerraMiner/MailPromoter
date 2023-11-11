@@ -22,7 +22,7 @@ public class DatabaseConnection {
         return connection.isClosed();
     }
 
-    public List<String> getMails() {
+    public List<String> getMails() throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM mails;")) {
 
             List<String> list = new ArrayList<>();
@@ -35,9 +35,6 @@ public class DatabaseConnection {
             }
 
             return list;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return Collections.emptyList();
         }
     }
 }

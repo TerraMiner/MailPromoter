@@ -13,6 +13,11 @@ public class EmailSender {
 
     private Session session;
 
+    public EmailSender(String userName, String password) {
+        loginSession(userName, password);
+        this.userName = userName;
+    }
+
     private void loginSession(String userName, String password) {
         Properties properties = System.getProperties();
 
@@ -26,11 +31,6 @@ public class EmailSender {
                 return new PasswordAuthentication(userName, password);
             }
         });
-    }
-
-    public EmailSender(String userName, String password) {
-        loginSession(userName, password);
-        this.userName = userName;
     }
 
     public void send(

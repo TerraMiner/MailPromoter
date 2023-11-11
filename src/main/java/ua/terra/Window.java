@@ -1,12 +1,8 @@
 package ua.terra;
 
-import lombok.SneakyThrows;
-
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.*;
 import java.awt.*;
 import java.io.File;
@@ -21,7 +17,7 @@ import static ua.terra.Main.sessionUser;
 
 public class Window extends JFrame {
     private JTextField hostField, portField, userField, baseField, passwordField;
-    private JTextArea logger;
+    private Logger logger;
     private JComboBox<String> fileComboBox;
     private JScrollPane scrollPane;
     private JButton connectButton;
@@ -34,37 +30,24 @@ public class Window extends JFrame {
     private EmailSender sender;
     private final String resourceFolder = "res";
     private final String promotesFolder = resourceFolder + "/promotes";
-    private final String targetFileExtension = "html";
+    private final String fileExtension = "html";
 
+    private boolean isStarted = false;
     private boolean isWaitStop = false;
 
     public Window() {
         setTitle("Mail Promoter");
         setSize(600, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setupButtons();
-        setupTextsField();
+        initButtons();
+        setupFields();
         loadAppIcon();
         setResizable(false);
         setIconImage(image);
         setVisible(true);
     }
 
-    public void print(Object text) {
-        logger.append(text.toString() + "\n");
-        logger.setCaretPosition(logger.getDocument().getLength());
-    }
-
-    private void printStackTrace(Exception e) {
-        try (StringWriter sw = new StringWriter(); PrintWriter pw = new PrintWriter(sw)) {
-            e.printStackTrace(pw);
-            String stackTrace = sw.toString();
-            print(stackTrace);
-        } catch (IOException ignored) {
-        }
-    }
-
-    private void setupButtons() {
+    private void initButtons() {
         hostField = new JTextField(10);
         portField = new JTextField(10);
         userField = new JTextField(10);
@@ -77,7 +60,7 @@ public class Window extends JFrame {
         baseField.setText("test");
         passwordField.setText("");
 
-        logger = new JTextArea();
+        logger = new Logger();
         scrollPane = new JScrollPane(logger);
         fileComboBox = new JComboBox<>();
         connectButton = new JButton("Connect");
@@ -94,7 +77,7 @@ public class Window extends JFrame {
         updateFilesButton.addActionListener(e -> updateFileComboBox());
     }
 
-    private void setupTextsField() {
+    private void setupFields() {
         JPanel panel = new JPanel(new GridLayout(0, 2));
         panel.add(new JLabel("Host:"));
         panel.add(hostField);
@@ -137,13 +120,13 @@ public class Window extends JFrame {
         String base = baseField.getText();
         String password = passwordField.getText();
 
-        print("Connecting to database...\n");
+        logger.print("Connecting to database...\n");
 
         if (connection != null) {
             try {
                 connection.close();
             } catch (SQLException e) {
-                printStackTrace(e);
+                logger.printStackTrace(e);
                 return;
             }
         }
@@ -151,28 +134,28 @@ public class Window extends JFrame {
         try {
             connection = new DatabaseConnection(host, port, user, password, base);
         } catch (SQLException e) {
-            printStackTrace(e);
+            logger.printStackTrace(e);
             return;
         }
 
         createSenderSession();
 
-        print("Host: " + host + "\n");
-        print("Port: " + port + "\n");
-        print("User: " + user + "\n");
-        print("Base: " + base + "\n");
-        print("Password: " + password + "\n");
-        print("Connection successful!\n");
+        logger.print("Host: " + host + "\n");
+        logger.print("Port: " + port + "\n");
+        logger.print("User: " + user + "\n");
+        logger.print("Base: " + base + "\n");
+        logger.print("Password: " + password + "\n");
+        logger.print("Connection successful!\n");
     }
 
     private void createSenderSession() {
         if (sessionUser == null || sessionPassword == null) {
-            print("It is necessary to pass the “login” and “password” properties through the -D parameters of the JVM.");
-            print("Example: java -Dlogin=myLogin -Dpassword=myPassword MyApp");
+            logger.print("It is necessary to pass the “login” and “password” properties through the -D parameters of the JVM.");
+            logger.print("Example: java -Dlogin=myLogin -Dpassword=myPassword MyApp");
             throw new IllegalArgumentException("login or password is null!");
         }
         sender = new EmailSender(sessionUser, sessionPassword);
-        print("Created Sender Session for" + sessionUser);
+        logger.print("Created Sender Session for" + sessionUser);
     }
 
     private void updateFileComboBox() {
@@ -182,13 +165,17 @@ public class Window extends JFrame {
         if (files != null) {
             for (File file : files) {
                 String extension = file.getName().substring(file.getName().lastIndexOf('.') + 1);
-                if (!extension.equals(targetFileExtension)) continue;
-                fileComboBox.addItem(file.getName());
+                if (!extension.equals(fileExtension)) continue;
+                String fileName = file.getName()
+                        .replace(".","")
+                        .replace(fileExtension, "");
+                fileComboBox.addItem(fileName);
             }
         }
     }
 
     private void stopSending() {
+        if (isConnected() || !isStarted) return;
         isWaitStop = true;
     }
 
@@ -198,30 +185,34 @@ public class Window extends JFrame {
             threads.forEach(Thread::interrupt);
             timer.cancel();
             isWaitStop = false;
+            isStarted = false;
             new Timer().schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    print("Process was finished!");
+                    logger.print("Process was finished!");
                 }
             }, 250);
         }
     }
 
-    @SneakyThrows
     private void startSending() {
-        if (!hasConnection()) {
-            print("Not connected!");
-            return;
-        }
+        if (isConnected() || isStarted) return;
 
         File resource = getSelectedFile();
 
         if (!resource.exists()) {
-            print("File not exists!");
+            logger.print("File not exists!");
             return;
         }
 
-        List<List<String>> list = Util.divideList(connection.getMails(), 32);
+        List<List<String>> list;
+
+        try {
+            list = Util.divideList(connection.getMails(), 32);
+        } catch (SQLException e) {
+            logger.printStackTrace(e);
+            return;
+        }
 
         List<Thread> threads = new ArrayList<>();
 
@@ -233,7 +224,7 @@ public class Window extends JFrame {
                             try {
                                 sender.send(mail, "Promotion", resource);
                             } catch (Exception e) {
-                                printStackTrace(e);
+                                logger.printStackTrace(e);
                             }
                             progress.incrementAndGet();
                         }
@@ -255,10 +246,18 @@ public class Window extends JFrame {
 
                 if (percent >= 100) {
                     isWaitStop = true;
-                    print("Sended:" + progress.get());
+                    logger.print("Sended:" + progress.get());
                 }
             }
         }, 0, 50);
+    }
+
+    private boolean isConnected() {
+        boolean statement = hasConnection();
+        if (!statement) {
+            logger.print("Not connected!");
+        }
+        return !statement;
     }
 
 
@@ -266,7 +265,7 @@ public class Window extends JFrame {
         try {
             return connection != null && !connection.isClosed();
         } catch (SQLException e) {
-            printStackTrace(e);
+            logger.printStackTrace(e);
             return false;
         }
     }
@@ -276,9 +275,12 @@ public class Window extends JFrame {
         return new File(promotesFolder + "/" + selected);
     }
 
-    @SneakyThrows
     private void loadAppIcon() {
-        image = ImageIO.read(new File("res/icon.png")).getScaledInstance(32, 32, SCALE_DEFAULT);
+        try {
+            image = ImageIO.read(new File("res/icon.png")).getScaledInstance(32, 32, SCALE_DEFAULT);
+        } catch (IOException e) {
+            logger.printStackTrace(e);
+        }
     }
 
     public static void open() {
